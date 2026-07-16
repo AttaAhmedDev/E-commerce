@@ -1,11 +1,11 @@
 from rest_framework import serializers
-from .models import Category, Brand
+from .models import Category, Brand, Product, ProductVariant, Inventory
 
 
 class CategorySerializer(serializers.ModelSerializer):
     """
     Full representation used for detail views and write operations.
-    `children` exposes immediate subcategories (not deeply nested) to
+    children exposes immediate subcategories (not deeply nested) to
     avoid recursive serialization cost — the frontend can request
     subcategories separately if it needs deeper trees.
     """
@@ -62,3 +62,140 @@ class BrandSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["id", "slug", "created_at"]
+
+
+class InventorySerializer(serializers.ModelSerializer):
+    is_low_stock = serializers.BooleanField(read_only=True)
+    is_out_of_stock = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = Inventory
+        fields = ["quantity", "low_stock_threshold", "is_low_stock", "is_out_of_stock"]
+
+
+class ProductVariantSerializer(serializers.ModelSerializer):
+    """
+    Nests Inventory directly since a variant without stock data is
+    incomplete — every variant read should show its current stock
+    alongside price/attributes in one response.
+    """
+
+    inventory = InventorySerializer(required=False)
+
+    class Meta:
+        model = ProductVariant
+        fields = [
+            "id",
+            "sku",
+            "size",
+            "color",
+            "price",
+            "is_active",
+            "inventory",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+    def validate_sku(self, value: str) -> str:
+        qs = ProductVariant.objects.filter(sku=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("A variant with this SKU already exists.")
+        return value
+
+    def create(self, validated_data: dict) -> ProductVariant:
+        inventory_data = validated_data.pop("inventory", {"quantity": 0})
+        variant = ProductVariant.objects.create(**validated_data)
+        Inventory.objects.create(variant=variant, **inventory_data)
+        return variant
+
+    def update(self, instance: ProductVariant, validated_data: dict) -> ProductVariant:
+        inventory_data = validated_data.pop("inventory", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if inventory_data is not None:
+            Inventory.objects.update_or_create(
+                variant=instance, defaults=inventory_data
+            )
+
+        return instance
+
+
+class ProductListSerializer(serializers.ModelSerializer):
+    """
+    Lightweight serializer for product LIST views. Deliberately avoids
+    nesting the full variants list — a catalog page showing 50 products
+    shouldn't pull every variant+inventory row for each one. Uses the
+    price_range/in_stock properties instead, which are cheap aggregate
+    queries rather than full row hydration.
+    """
+
+    category = CategoryMinimalSerializer(read_only=True)
+    brand = serializers.SlugRelatedField(slug_field="name", read_only=True)
+    price_range = serializers.SerializerMethodField()
+    in_stock = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = Product
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "category",
+            "brand",
+            "price_range",
+            "in_stock",
+            "is_active",
+        ]
+
+    def get_price_range(self, obj: Product) -> dict | None:
+        return obj.price_range
+
+
+class ProductDetailSerializer(serializers.ModelSerializer):
+    """
+    Full representation for a single product page — includes all
+    active variants with their inventory. This is the expensive
+    serializer, intentionally reserved for detail views only.
+    """
+
+    category = CategoryMinimalSerializer(read_only=True)
+    category_id = serializers.PrimaryKeyRelatedField(
+        source="category", queryset=Category.objects.all(), write_only=True
+    )
+    brand = BrandSerializer(read_only=True)
+    brand_id = serializers.PrimaryKeyRelatedField(
+        source="brand",
+        queryset=Brand.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    variants = ProductVariantSerializer(many=True, read_only=True)
+    price_range = serializers.SerializerMethodField()
+    in_stock = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = Product
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "description",
+            "category",
+            "category_id",
+            "brand",
+            "brand_id",
+            "variants",
+            "price_range",
+            "in_stock",
+            "is_active",
+            "created_at",
+        ]
+        read_only_fields = ["id", "slug", "created_at"]
+
+    def get_price_range(self, obj: Product) -> dict | None:
+        return obj.price_range
