@@ -71,13 +71,6 @@ class ProductViewSet(viewsets.ModelViewSet):
 
 
 class ProductVariantViewSet(viewsets.ModelViewSet):
-    """
-    Manages variants for a SPECIFIC product, nested under it in the
-    URL (/products/<product_slug>/variants/). A variant only makes
-    sense in the context of its parent product, so this is never
-    exposed as a flat top-level /variants/ endpoint.
-    """
-
     serializer_class = ProductVariantSerializer
     permission_classes = [IsAdminOrReadOnly]
 
@@ -85,6 +78,13 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
         return ProductVariant.objects.filter(
             product__slug=self.kwargs["product_slug"]
         ).select_related("inventory")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["product"] = Product.objects.filter(
+            slug=self.kwargs["product_slug"]
+        ).first()
+        return context
 
     def perform_create(self, serializer):
         product = Product.objects.get(slug=self.kwargs["product_slug"])

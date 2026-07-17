@@ -104,6 +104,34 @@ class ProductVariantSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("A variant with this SKU already exists.")
         return value
 
+    def validate_price(self, value) -> "Decimal":
+        if value <= 0:
+            raise serializers.ValidationError("Price must be greater than zero.")
+        return value
+
+    def validate(self, attrs: dict) -> dict:
+        # Determine the product this variant belongs to. On create, it's
+        # passed via context (set in the view's perform_create); on
+        # update, it's already on self.instance.
+        product = attrs.get("product") or (
+            self.instance.product if self.instance else None
+        )
+        if product is None:
+            product = self.context.get("product")
+
+        size = attrs.get("size", self.instance.size if self.instance else "")
+        color = attrs.get("color", self.instance.color if self.instance else "")
+
+        if product is not None:
+            qs = ProductVariant.objects.filter(product=product, size=size, color=color)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    "A variant with this size/color combination already exists for this product."
+                )
+        return attrs
+
     def create(self, validated_data: dict) -> ProductVariant:
         inventory_data = validated_data.pop("inventory", {"quantity": 0})
         variant = ProductVariant.objects.create(**validated_data)

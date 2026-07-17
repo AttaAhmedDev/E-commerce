@@ -32,7 +32,7 @@ class ProductVariantFactory(factory.django.DjangoModelFactory):
 
     product = factory.SubFactory(ProductFactory)
     sku = factory.Sequence(lambda n: f"SKU-{n:05d}")
-    size = factory.Sequence(lambda n: f"size-{n}")
+    size = "M"
     color = "Red"
     price = 20.00
 

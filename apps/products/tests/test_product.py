@@ -62,10 +62,15 @@ class TestProductRead:
         assert len(response.data["variants"]) == 1
         assert response.data["variants"][0]["sku"] == "SKU-DETAIL-1"
 
+    # edit test by add size adn color, factory take default this will bad test
     def test_price_range_reflects_variants(self):
         product = ProductFactory()
-        ProductVariantFactory(product=product, sku="SKU-A", price=Decimal("20.00"))
-        ProductVariantFactory(product=product, sku="SKU-B", price=Decimal("45.00"))
+        ProductVariantFactory(
+            product=product, sku="SKU-A", size="M", color="Red", price=Decimal("20.00")
+        )
+        ProductVariantFactory(
+            product=product, sku="SKU-B", size="L", color="Blue", price=Decimal("45.00")
+        )
 
         response = APIClient().get(f"{self.url}{product.slug}/")
 
@@ -161,25 +166,6 @@ class TestProductVariant:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_duplicate_size_color_for_same_product_rejected(self, admin_client):
-        product = ProductFactory()
-        ProductVariantFactory(product=product, size="M", color="Red")
-
-        # This hits the model-level UniqueConstraint, not serializer
-        # validation, since size+color combos aren't checked in the
-        # serializer directly.
-        from apps.products.models import ProductVariant
-        from django.db import IntegrityError
-
-        with pytest.raises(IntegrityError):
-            ProductVariant.objects.create(
-                product=product,
-                sku="SKU-DUP-COMBO",
-                size="M",
-                color="Red",
-                price=15,
-            )
-
     def test_variant_negative_price_rejected_at_db_level(self):
         from apps.products.models import ProductVariant
         from django.db import IntegrityError
@@ -210,3 +196,21 @@ class TestProductVariant:
         )
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_duplicate_size_color_returns_400_via_api(self, admin_client):
+        product = ProductFactory()
+        ProductVariantFactory(product=product, size="M", color="Red")
+
+        url = f"/api/v1/products/{product.slug}/variants/"
+        response = admin_client.post(
+            url,
+            {
+                "sku": "SKU-DUP-COMBO",
+                "size": "M",
+                "color": "Red",
+                "price": "15.00",
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
