@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Brand, Product, ProductVariant, Inventory
+from .models import Category, Brand, Product, ProductVariant, Inventory, ProductImage
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -71,6 +71,13 @@ class InventorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Inventory
         fields = ["quantity", "low_stock_threshold", "is_low_stock", "is_out_of_stock"]
+
+
+class ProductImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductImage
+        fields = ["id", "image", "alt_text", "is_primary", "display_order"]
+        read_only_fields = ["id"]
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
@@ -153,18 +160,11 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 
 class ProductListSerializer(serializers.ModelSerializer):
-    """
-    Lightweight serializer for product LIST views. Deliberately avoids
-    nesting the full variants list — a catalog page showing 50 products
-    shouldn't pull every variant+inventory row for each one. Uses the
-    price_range/in_stock properties instead, which are cheap aggregate
-    queries rather than full row hydration.
-    """
-
     category = CategoryMinimalSerializer(read_only=True)
     brand = serializers.SlugRelatedField(slug_field="name", read_only=True)
     price_range = serializers.SerializerMethodField()
     in_stock = serializers.BooleanField(read_only=True)
+    primary_image = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -176,20 +176,23 @@ class ProductListSerializer(serializers.ModelSerializer):
             "brand",
             "price_range",
             "in_stock",
+            "primary_image",
             "is_active",
         ]
 
     def get_price_range(self, obj: Product) -> dict | None:
         return obj.price_range
 
+    def get_primary_image(self, obj: Product) -> str | None:
+        # Uses the prefetched `images` queryset (set up in the view) so
+        # this doesn't trigger a fresh query per product in the list.
+        primary = next((img for img in obj.images.all() if img.is_primary), None)
+        if primary is None:
+            primary = next(iter(obj.images.all()), None)
+        return primary.image.url if primary and primary.image else None
+
 
 class ProductDetailSerializer(serializers.ModelSerializer):
-    """
-    Full representation for a single product page — includes all
-    active variants with their inventory. This is the expensive
-    serializer, intentionally reserved for detail views only.
-    """
-
     category = CategoryMinimalSerializer(read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(
         source="category", queryset=Category.objects.all(), write_only=True
@@ -203,6 +206,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     variants = ProductVariantSerializer(many=True, read_only=True)
+    images = ProductImageSerializer(many=True, read_only=True)
     price_range = serializers.SerializerMethodField()
     in_stock = serializers.BooleanField(read_only=True)
 
@@ -218,6 +222,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "brand",
             "brand_id",
             "variants",
+            "images",
             "price_range",
             "in_stock",
             "is_active",

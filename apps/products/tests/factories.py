@@ -1,5 +1,15 @@
 import factory
-from apps.products.models import Category, Brand, Product, ProductVariant, Inventory
+import io
+from PIL import Image
+from django.core.files.uploadedfile import SimpleUploadedFile
+from apps.products.models import (
+    Category,
+    Brand,
+    Product,
+    ProductVariant,
+    Inventory,
+    ProductImage,
+)
 
 
 class CategoryFactory(factory.django.DjangoModelFactory):
@@ -40,3 +50,17 @@ class ProductVariantFactory(factory.django.DjangoModelFactory):
     def inventory(self, create, extracted, **kwargs):
         if create:
             Inventory.objects.create(variant=self, quantity=extracted or 10)
+
+
+def generate_test_image(name: str = "test.jpg") -> SimpleUploadedFile:
+    """
+    Creates a real, valid in-memory image file for tests. Django's
+    ImageField validates actual image content (via Pillow), not just
+    the filename — a plain text file renamed to .jpg would fail
+    validation, so tests need genuinely valid image bytes.
+    """
+    file = io.BytesIO()
+    image = Image.new("RGB", (100, 100), color="red")
+    image.save(file, "JPEG")
+    file.seek(0)
+    return SimpleUploadedFile(name, file.read(), content_type="image/jpeg")

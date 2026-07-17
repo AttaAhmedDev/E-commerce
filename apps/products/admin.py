@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Category, Brand, Product, ProductVariant, Inventory
+from .models import Category, Brand, Product, ProductVariant, Inventory, ProductImage
 
 
 @admin.register(Category)
@@ -18,6 +18,11 @@ class BrandAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
 
 
+class ProductImageInline(admin.TabularInline):
+    model = ProductImage
+    extra = 1
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = ["name", "category", "brand", "is_active", "created_at"]
@@ -25,6 +30,7 @@ class ProductAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     prepopulated_fields = {"slug": ("name",)}
     autocomplete_fields = ["category", "brand"]
+    inlines = [ProductImageInline]
 
 
 class InventoryInline(admin.StackedInline):

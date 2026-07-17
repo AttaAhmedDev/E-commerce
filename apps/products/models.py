@@ -211,3 +211,38 @@ class Inventory(TimeStampedModel):
     @property
     def is_out_of_stock(self) -> bool:
         return self.quantity == 0
+
+
+class ProductImage(TimeStampedModel):
+    """
+    A single image in a product's gallery. Exactly one image per
+    product should have is_primary=True — enforced in save(), not a DB
+    constraint, since conditional uniqueness ("only one True value")
+    isn't portably expressible as a simple UniqueConstraint.
+    """
+
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="images",
+    )
+    image = models.ImageField(upload_to="products/")
+    alt_text = models.CharField(max_length=200, blank=True)
+    is_primary = models.BooleanField(default=False)
+    display_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "product_images"
+        ordering = ["display_order", "id"]
+
+    def __str__(self) -> str:
+        return f"Image for {self.product.name}"
+
+    def save(self, *args, **kwargs) -> None:
+        if self.is_primary:
+            # Unset primary on any sibling images before saving this one,
+            # so there's never more than one primary image per product.
+            ProductImage.objects.filter(product=self.product, is_primary=True).exclude(
+                pk=self.pk
+            ).update(is_primary=False)
+        super().save(*args, **kwargs)
