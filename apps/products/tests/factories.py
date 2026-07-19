@@ -49,7 +49,8 @@ class ProductVariantFactory(factory.django.DjangoModelFactory):
     @factory.post_generation
     def inventory(self, create, extracted, **kwargs):
         if create:
-            Inventory.objects.create(variant=self, quantity=extracted or 10)
+            quantity = extracted if extracted is not None else 10
+            Inventory.objects.create(variant=self, quantity=quantity)
 
 
 def generate_test_image(name: str = "test.jpg") -> SimpleUploadedFile:
