@@ -1,36 +1,48 @@
-# E-commerce API
+# E-Commerce Backend
 
-A Django REST Framework project for an e-commerce backend with authentication, product management, and API documentation.
-
-## Features
-- JWT authentication
-- User profile management
-- Product CRUD endpoints
-- API schema generation with drf-spectacular
+A production-grade Django e-commerce backend, built feature-by-feature using a structured 13-step development methodology to ensure consistency, testability, and maintainability.
 
 ## Tech Stack
-- Python 3.12+
-- Django
-- Django REST Framework
-- PostgreSQL
 
-## Setup
-1. Create and activate a virtual environment
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Copy `.env.example` to `.env` and update the values
-4. Run migrations:
-   ```bash
-   python manage.py migrate
-   ```
-5. Start the development server:
-   ```bash
-   python manage.py runserver
-   ```
+- **Language / Framework:** Python 3.14.3, Django 6.0.7
+- **API:** Django REST Framework (DRF)
+- **Database:** PostgreSQL
+- **Auth:** SimpleJWT (with token blacklisting)
+- **API Docs:** drf-spectacular
+- **Filtering:** django-filter
+- **Testing:** pytest-django, factory-boy
 
-## Testing
+## Development Methodology
+
+Every feature in this project is built through the same structured 13-step process, which keeps development consistent and ensures each piece is fully tested before moving to the next. (Fill in the exact 13 steps here if you want them documented explicitly.)
+
+## Progress
+
+### ✅ Completed
+
+- **Project Setup** — base Django project configured with the stack above
+- **Feature 1: Authentication** — JWT-based auth with token blacklisting
+- **Feature 2: Profile / Password Management** — user profile updates and password change/reset flows
+
+All tests are passing (green) through the completed work above.
+
+### 🚧 In Progress
+
+- **Feature 3.1: Category / Brand Models** — currently being built (models stage)
+
+### 📋 Upcoming
+
+- Remaining steps of Feature 3 (Category/Brand: serializers, views, filters, tests, docs)
+- Future features TBD
+
+## Running Tests
+
 ```bash
 pytest
 ```
+
+## API Documentation
+
+Auto-generated via drf-spectacular. Once the server is running, check your configured schema/docs endpoint (e.g. `/api/schema/`, `/api/docs/`).
+
+---
