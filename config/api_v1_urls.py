@@ -2,5 +2,6 @@ from django.urls import path, include
 
 urlpatterns = [
     path("auth/", include("apps.accounts.urls")),
-    path("", include("apps.products.urls")),  # ← new
+    path("cart/", include("apps.cart.urls")),  # ← new
+    path("", include("apps.products.urls")),
 ]

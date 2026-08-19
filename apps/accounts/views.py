@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
+from apps.cart.utils import merge_session_cart_into_user_cart
+
 
 from .serializers import (
     RegisterSerializer,
@@ -146,3 +148,36 @@ class ChangePasswordView(APIView):
         tokens = OutstandingToken.objects.filter(user=user)
         for token in tokens:
             BlacklistedToken.objects.get_or_create(token=token)
+
+
+class RegisterView(generics.CreateAPIView):
+    serializer_class = RegisterSerializer
+    permission_classes = [AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        merge_session_cart_into_user_cart(request, user)  # ← new
+
+        return Response(
+            {"user": UserSerializer(user).data, "tokens": _tokens_for_user(user)},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class LoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data["user"]
+
+        merge_session_cart_into_user_cart(request, user)  # ← new
+
+        return Response(
+            {"user": UserSerializer(user).data, "tokens": _tokens_for_user(user)},
+            status=status.HTTP_200_OK,
+        )
