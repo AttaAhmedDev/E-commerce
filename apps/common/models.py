@@ -12,4 +12,5 @@ class TimeStampedModel(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        # This model is abstract, so it will not be created in the database
         abstract = True
