@@ -1,6 +1,6 @@
 # E-Commerce Backend
 
-A Django REST API for an e-commerce catalog, authentication, and cart. Features are added one at a time with tests before moving on.
+A Django REST API for an e-commerce catalog, authentication, cart, and wishlist. Features are added one at a time with tests before moving on.
 
 ## Tech Stack
 
@@ -24,6 +24,7 @@ A Django REST API for an e-commerce catalog, authentication, and cart. Features 
 - **Product images** — gallery with a single primary image per product
 - **Search, filter, sort** — product listing query params
 - **Cart** — guest session cart, authenticated cart, merge on login/register
+- **Wishlist** — login-required saved products (`Product`, not variant), unique per user, IDOR-safe list/add/remove
 
 ### Upcoming
 
@@ -34,6 +35,8 @@ A Django REST API for an e-commerce catalog, authentication, and cart. Features 
 Price and stock live on **`ProductVariant`**, not on `Product`. A product is the listing (name, category, brand, images). The sellable unit is a variant (SKU, size, color, price) with a separate `Inventory` row.
 
 Cart lines also point at variants, and they read `variant.price` live — they do not store a snapshot until checkout.
+
+Wishlist items point at **`Product`** instead — a general “I want this” signal, not a size/color commitment.
 
 ## Getting started
 
@@ -118,6 +121,16 @@ Same endpoints for guests and logged-in users. Guests need the session cookie (`
 
 Quantity cannot exceed inventory. Login and register merge the session cart into the user cart (quantities add for the same variant) and delete the guest cart.
 
+### Wishlist
+
+Login required. Items are scoped to the current user only (no guest wishlist).
+
+| Method | Path | Behavior |
+|--------|------|----------|
+| GET | `/api/v1/wishlist/` | Current user's wishlist (`product_detail`, `created_at`) |
+| POST | `/api/v1/wishlist/items/` | `{ "product_id": 1 }` — rejects duplicates and inactive products |
+| DELETE | `/api/v1/wishlist/items/{id}/` | Remove own item; other users' IDs return 404 |
+
 ## Project layout
 
 ```
@@ -127,6 +140,7 @@ apps/
   accounts/             # custom User (email + role)
   products/             # catalog models, filters, nested routes
   cart/                 # session/user carts and merge helper
+  wishlist/             # login-required saved products
 ```
 
 ## Tests
