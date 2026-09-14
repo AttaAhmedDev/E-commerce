@@ -59,6 +59,28 @@ python manage.py runserver
 
 Local settings load from `config.settings.local` (see `.env.example`). Production settings live in `config.settings.production`.
 
+## Docker
+
+Copy the environment file first:
+
+```bash
+cp .env.example .env
+```
+
+Build and start Django with PostgreSQL:
+
+```bash
+docker compose up --build
+```
+
+Run migrations in the web container:
+
+```bash
+docker compose exec web python manage.py migrate
+```
+
+The API will be available at [http://localhost:8000/](http://localhost:8000/). The Compose setup uses the same `.env` values as local development, but overrides `DB_HOST` to `db` so Django can reach the PostgreSQL container.
+
 ## API
 
 Base path: `/api/v1/`

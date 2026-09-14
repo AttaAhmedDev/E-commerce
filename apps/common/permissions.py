@@ -1,4 +1,7 @@
-from rest_framework.permissions import BasePermission, SAFE_METHODS
+from rest_framework.permissions import (
+    BasePermission,
+    SAFE_METHODS,
+)  # SAFE_METHODS is a tuple of HTTP methods that are considered safe (GET, HEAD, OPTIONS)
 
 
 class IsAdminOrReadOnly(BasePermission):

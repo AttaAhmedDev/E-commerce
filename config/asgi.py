@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/6.0/howto/deployment/asgi/
 
 import os
 
+# server settings for ASGI (link between web server and Django web application)
 from django.core.asgi import get_asgi_application
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.local")

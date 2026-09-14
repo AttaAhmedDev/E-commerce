@@ -175,7 +175,7 @@ class LoginView(APIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data["user"]
 
-        merge_session_cart_into_user_cart(request, user)  # ← new
+        merge_session_cart_into_user_cart(request, user)
 
         return Response(
             {"user": UserSerializer(user).data, "tokens": _tokens_for_user(user)},

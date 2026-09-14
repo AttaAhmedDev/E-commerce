@@ -1,9 +1,11 @@
 from django.contrib.auth.models import (
-    AbstractBaseUser,
-    PermissionsMixin,
-    BaseUserManager,
+    AbstractBaseUser,  # Django's default abstract base user model
+    PermissionsMixin,  # Django's default permissions mixin
+    BaseUserManager,  # Django's default user manager
 )
 from django.db import models
+
+# for translation support
 from django.utils.translation import gettext_lazy as _
 
 from apps.common.models import TimeStampedModel
