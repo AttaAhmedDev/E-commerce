@@ -1,11 +1,11 @@
-from rest_framework import status, generics
+from rest_framework import status, generics, viewsets
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from apps.cart.utils import merge_session_cart_into_user_cart
-
+from .models import Address
 
 from .serializers import (
     RegisterSerializer,
@@ -14,6 +14,7 @@ from .serializers import (
     LogoutSerializer,
     ChangePasswordSerializer,
     ProfileSerializer,
+    AddressSerializer,
 )
 
 
@@ -181,3 +182,21 @@ class LoginView(APIView):
             {"user": UserSerializer(user).data, "tokens": _tokens_for_user(user)},
             status=status.HTTP_200_OK,
         )
+
+
+class AddressView(viewsets.ModelViewSet):
+    """
+    Full CRUD for the current user's own address book. Scoped
+    entirely to request.user — same IDOR-safe pattern as Cart and
+    Wishlist: get_queryset() filters by owner, so there's no way to
+    view, edit, or delete another user's saved address by guessing IDs.
+    """
+
+    serializer_class = AddressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Address.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)

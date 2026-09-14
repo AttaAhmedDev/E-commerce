@@ -2,7 +2,7 @@ from django.contrib.auth import authenticate
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import User
+from .models import Address, User
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -159,3 +159,23 @@ class ChangePasswordSerializer(serializers.Serializer):
         user.set_password(self.validated_data["new_password"])
         user.save(update_fields=["password"])
         return user
+
+
+class AddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Address
+        fields = [
+            "id",
+            "full_name",
+            "phone_number",
+            "address_line_1",
+            "address_line_2",
+            "city",
+            "state",
+            "postal_code",
+            "country",
+            "address_type",
+            "is_default",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]

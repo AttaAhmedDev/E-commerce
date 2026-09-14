@@ -111,3 +111,53 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
     @property
     def full_name(self) -> str:
         return f"{self.first_name} {self.last_name}".strip()
+
+
+class AddressType(models.TextChoices):
+    SHIPPING = ("shipping", "Shipping")
+    BILLING = ("billing", "Billing")
+
+
+class Address(TimeStampedModel):
+    """
+    A saved address in a user's address book. Deliberately stores its
+    own full_name/phone_number rather than pulling from User — the
+    recipient may differ from the account owner (e.g. gifting), and
+    even when it doesn't, contact info shouldn't silently drift if the
+    user edits their profile later.
+
+    Orders will SNAPSHOT (copy) the relevant fields from an Address at
+    checkout time rather than holding a live FK — so editing or
+    deleting a saved address never rewrites history on a past order.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="addresses")
+    full_name = models.CharField(max_length=255)
+    phone_number = models.CharField(max_length=20)
+    address_line_1 = models.CharField(max_length=255)
+    address_line_2 = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100)
+    state = models.CharField(max_length=100)
+    postal_code = models.CharField(max_length=20)
+    country = models.CharField(max_length=100)
+    address_type = models.CharField(max_length=10, choices=AddressType.choices)
+    is_default = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "addresses"
+        verbose_name = "Address"
+        ordering = ["-is_default", "-created_at"]
+
+    # for string representation of the address in admin panel
+    def __str__(self) -> str:
+        return f"{self.full_name} — {self.city}, {self.country} ({self.address_type})"
+
+    def save(self, *args, **kwargs):
+        if self.is_default:
+            # Only one default address per user PER TYPE — a user can
+            # have one default shipping AND one default billing address
+            # simultaneously, but not two defaults of the same type.
+            Address.objects.filter(
+                user=self.user, address_type=self.address_type, is_default=True
+            ).exclude(pk=self.pk).update(is_default=False)
+        super().save(*args, **kwargs)
