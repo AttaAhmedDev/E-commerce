@@ -1,6 +1,6 @@
 # E-Commerce Backend
 
-A Django REST API for an e-commerce catalog, authentication, cart, and wishlist. Features are added one at a time with tests before moving on.
+A Django REST API for an e-commerce catalog, authentication, cart, wishlist, address book, and checkout. Features are added one at a time with tests before moving on.
 
 ## Tech Stack
 
@@ -25,10 +25,13 @@ A Django REST API for an e-commerce catalog, authentication, cart, and wishlist.
 - **Search, filter, sort** — product listing query params
 - **Cart** — guest session cart, authenticated cart, merge on login/register
 - **Wishlist** — login-required saved products (`Product`, not variant), unique per user, IDOR-safe list/add/remove
+- **Address book** — saved shipping/billing addresses, scoped to the current user
+- **Orders / checkout** — cart → order with price and address snapshots, COD vs online stock handling, row-level inventory locks
 
 ### Upcoming
 
-- Orders / checkout (cart items reference `ProductVariant`; orders should snapshot price)
+- Online payment capture / webhooks (confirm or release reserved stock)
+- Shipping cost calculation (currently `0.00`)
 
 ## Catalog design
 
@@ -37,6 +40,10 @@ Price and stock live on **`ProductVariant`**, not on `Product`. A product is the
 Cart lines also point at variants, and they read `variant.price` live — they do not store a snapshot until checkout.
 
 Wishlist items point at **`Product`** instead — a general “I want this” signal, not a size/color commitment.
+
+Checkout copies price, SKU, size, color, and the chosen addresses onto the order. Editing a product or a saved address later does not rewrite past orders.
+
+Available stock is `quantity - reserved_quantity`. Cash on delivery decrements `quantity` immediately. Online payment increments `reserved_quantity` and leaves the order `pending_payment` until capture is implemented.
 
 ## Getting started
 
@@ -153,16 +160,46 @@ Login required. Items are scoped to the current user only (no guest wishlist).
 | POST | `/api/v1/wishlist/items/` | `{ "product_id": 1 }` — rejects duplicates and inactive products |
 | DELETE | `/api/v1/wishlist/items/{id}/` | Remove own item; other users' IDs return 404 |
 
+### Addresses
+
+Login required. Full CRUD on the current user's address book only (other users' IDs return 404).
+
+| Method | Path | Behavior |
+|--------|------|----------|
+| GET | `/api/v1/auth/addresses/` | List own addresses |
+| POST | `/api/v1/auth/addresses/` | Create — `full_name`, `phone_number`, `address_line_1`, `city`, `postal_code`, `country`, `address_type` (`shipping` or `billing`); optional `address_line_2`, `state`, `is_default` |
+| GET / PATCH / DELETE | `/api/v1/auth/addresses/{id}/` | Retrieve, update, or delete own address |
+
+Setting `is_default` to `true` clears the previous default of the same `address_type` for that user.
+
+### Orders
+
+Login required. Checkout reads the authenticated user's cart — clients cannot pass arbitrary line items. Addresses must belong to the current user.
+
+| Method | Path | Behavior |
+|--------|------|----------|
+| POST | `/api/v1/orders/checkout/` | `{ "shipping_address_id": 1, "billing_address_id": 1, "payment_method": "cod" }` — `cod` or `online` |
+| GET | `/api/v1/orders/` | Own order history |
+| GET | `/api/v1/orders/{id}/` | Own order detail; other users' IDs return 404 |
+
+Checkout rejects an empty cart and quantities above available stock. On success it snapshots item and address fields, updates inventory, and clears the cart.
+
+- **`cod`** — order status `confirmed`; `inventory.quantity` decreases
+- **`online`** — order status `pending_payment`; `inventory.reserved_quantity` increases (total quantity is unchanged until payment is captured)
+
+Concurrent checkouts lock inventory rows with `SELECT FOR UPDATE` so two buyers cannot oversell the last unit.
+
 ## Project layout
 
 ```
 config/                 # Django project (urls, split settings)
 apps/
   common/               # timestamps, pagination, permissions, errors
-  accounts/             # custom User (email + role)
+  accounts/             # custom User (email + role), address book
   products/             # catalog models, filters, nested routes
   cart/                 # session/user carts and merge helper
   wishlist/             # login-required saved products
+  orders/               # checkout, order history, inventory reservation
 ```
 
 ## Tests
