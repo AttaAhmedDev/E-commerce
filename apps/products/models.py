@@ -189,6 +189,7 @@ class Inventory(TimeStampedModel):
         related_name="inventory",
     )
     quantity = models.PositiveIntegerField(default=0)
+    reserved_quantity = models.PositiveIntegerField(default=0)
     low_stock_threshold = models.PositiveIntegerField(default=5)
 
     class Meta:
@@ -199,10 +200,25 @@ class Inventory(TimeStampedModel):
                 condition=models.Q(quantity__gte=0),
                 name="inventory_quantity_non_negative",
             ),
+            models.CheckConstraint(
+                condition=models.Q(reserved_quantity__gte=0),
+                name="inventory_reserved_quantity_non_negative",
+            ),
+            models.CheckConstraint(
+                # reserved stock can never exceed total stock
+                condition=models.Q(reserved_quantity__lte=models.F("quantity")),
+                name="inventory_reserved_not_exceed_quantity",
+            ),
         ]
 
     def __str__(self) -> str:
         return f"{self.variant.sku}: {self.quantity} in stock"
+
+    # defense-in-depth for prevent negative inventory
+    @property
+    def available_quantity(self) -> int:
+        """Stock that's actually sellable right now — total minus what's held for pending online payments."""
+        return self.quantity - self.reserved_quantity
 
     @property
     def is_low_stock(self) -> bool:

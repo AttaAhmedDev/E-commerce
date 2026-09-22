@@ -33,6 +33,7 @@ class ProductAdmin(admin.ModelAdmin):
     inlines = [ProductImageInline]
 
 
+# difference between StackedInline and TabularInline is StackedInline is more vertical and TabularInline is more horizontal
 class InventoryInline(admin.StackedInline):
     model = Inventory
     extra = 0
