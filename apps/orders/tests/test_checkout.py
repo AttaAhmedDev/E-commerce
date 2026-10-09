@@ -198,6 +198,28 @@ class TestCheckout:
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
+    def test_checkout_respects_stock_reserved_by_pending_online_orders(
+        self, checkout_setup
+    ):
+        client, user, variant, address = checkout_setup
+        # 8 of 10 units are held for someone else's pending online payment
+        Inventory.objects.filter(variant=variant).update(reserved_quantity=8)
+
+        # setup cart has quantity=2, so it fits (available = 2); bump it to 3
+        CartItem.objects.filter(cart__user=user).update(quantity=3)
+
+        response = client.post(
+            self.url,
+            {
+                "shipping_address_id": address.id,
+                "billing_address_id": address.id,
+                "payment_method": "cod",
+            },
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert Order.objects.count() == 0
+
 
 class TestOrderHistory:
     def test_user_sees_only_own_orders(self, checkout_setup):

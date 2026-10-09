@@ -27,10 +27,11 @@ A Django REST API for an e-commerce catalog, authentication, cart, wishlist, add
 - **Wishlist** — login-required saved products (`Product`, not variant), unique per user, IDOR-safe list/add/remove
 - **Address book** — saved shipping/billing addresses, scoped to the current user
 - **Orders / checkout** — cart → order with price and address snapshots, COD vs online stock handling, row-level inventory locks
+- **Order lifecycle** — customer cancel before fulfillment, staff status updates (payment resolution and processing → shipped → delivered), inventory commit / release / restock, and a row lock so a racing cancel restores stock once
 
 ### Upcoming
 
-- Online payment capture / webhooks (confirm or release reserved stock)
+- Payment gateway webhooks (staff can already confirm or fail a pending payment; a real gateway callback is still to be wired)
 - Shipping cost calculation (currently `0.00`)
 
 ## Catalog design
@@ -43,7 +44,16 @@ Wishlist items point at **`Product`** instead — a general “I want this” si
 
 Checkout copies price, SKU, size, color, and the chosen addresses onto the order. Editing a product or a saved address later does not rewrite past orders.
 
-Available stock is `quantity - reserved_quantity`. Cash on delivery decrements `quantity` immediately. Online payment increments `reserved_quantity` and leaves the order `pending_payment` until capture is implemented.
+Available stock is `quantity - reserved_quantity`. Cash on delivery decrements `quantity` immediately and starts the order at `confirmed`. Online payment increments `reserved_quantity` and leaves the order `pending_payment`. Cart quantity checks use that same available amount, so reserved units cannot be added to another cart.
+
+Later status changes adjust inventory:
+
+- `pending_payment` → `confirmed` converts the reservation into a real decrement (`reserved_quantity` and `quantity` both decrease)
+- `pending_payment` → `payment_failed` or `cancelled` releases the reservation only
+- `confirmed`, `processing`, or `shipped` → `cancelled` puts the units back on `quantity`
+- `processing` → `shipped` → `delivered` does not change stock
+
+`delivered`, `cancelled`, and `payment_failed` are terminal. Invalid jumps (for example `confirmed` → `shipped`) are rejected and leave inventory unchanged.
 
 ## Getting started
 
@@ -148,7 +158,7 @@ Same endpoints for guests and logged-in users. Guests need the session cookie (`
 | PATCH | `/api/v1/cart/items/{id}/` | Update quantity |
 | DELETE | `/api/v1/cart/items/{id}/` | Remove line |
 
-Quantity cannot exceed inventory. Login and register merge the session cart into the user cart (quantities add for the same variant) and delete the guest cart.
+Quantity cannot exceed available inventory (`quantity - reserved_quantity`). Login and register merge the session cart into the user cart (quantities add for the same variant) and delete the guest cart.
 
 ### Wishlist
 
@@ -181,13 +191,26 @@ Login required. Checkout reads the authenticated user's cart — clients cannot 
 | POST | `/api/v1/orders/checkout/` | `{ "shipping_address_id": 1, "billing_address_id": 1, "payment_method": "cod" }` — `cod` or `online` |
 | GET | `/api/v1/orders/` | Own order history |
 | GET | `/api/v1/orders/{id}/` | Own order detail; other users' IDs return 404 |
+| POST | `/api/v1/orders/{id}/cancel/` | Cancel own order while it is `pending_payment` or `confirmed`; other users' IDs return 404 |
+| POST | `/api/v1/orders/{id}/status/` | Admin/staff — body: `{ "status": "processing" }` |
 
 Checkout rejects an empty cart and quantities above available stock. On success it snapshots item and address fields, updates inventory, and clears the cart.
 
 - **`cod`** — order status `confirmed`; `inventory.quantity` decreases
-- **`online`** — order status `pending_payment`; `inventory.reserved_quantity` increases (total quantity is unchanged until payment is captured)
+- **`online`** — order status `pending_payment`; `inventory.reserved_quantity` increases (total quantity is unchanged until payment is confirmed)
 
 Concurrent checkouts lock inventory rows with `SELECT FOR UPDATE` so two buyers cannot oversell the last unit.
+
+Allowed status moves:
+
+| From | To |
+|------|----|
+| `pending_payment` | `confirmed`, `payment_failed`, `cancelled` |
+| `confirmed` | `processing`, `cancelled` |
+| `processing` | `shipped`, `cancelled` |
+| `shipped` | `delivered`, `cancelled` |
+
+Customers can cancel only while the order is `pending_payment` or `confirmed`. After fulfillment starts, cancel returns 400 and tells them to contact support. Staff and admin can cancel a `processing` or `shipped` order through the same cancel endpoint, and they use `/status/` for payment resolution and fulfillment. The transition locks the order row, so two cancels at once restore stock exactly once.
 
 ## Project layout
 
@@ -199,7 +222,7 @@ apps/
   products/             # catalog models, filters, nested routes
   cart/                 # session/user carts and merge helper
   wishlist/             # login-required saved products
-  orders/               # checkout, order history, inventory reservation
+  orders/               # checkout, history, status transitions, inventory effects
 ```
 
 ## Tests

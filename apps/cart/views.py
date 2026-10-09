@@ -2,6 +2,8 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
+from django.core.exceptions import ValidationError as DjangoValidationError
+
 
 from .models import CartItem
 from .serializers import CartSerializer, CartItemSerializer
@@ -45,7 +47,12 @@ class CartItemAddView(APIView):
         existing = cart.items.filter(variant=variant).first()
         if existing:
             existing.quantity += quantity
-            existing.full_clean()
+            try:
+                existing.full_clean()
+            except DjangoValidationError as exc:
+                return Response(
+                    {"quantity": exc.messages}, status=status.HTTP_400_BAD_REQUEST
+                )
             existing.save()
             return Response(
                 CartItemSerializer(existing).data, status=status.HTTP_200_OK

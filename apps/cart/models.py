@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from apps.common.models import TimeStampedModel
 from apps.accounts.models import User
 from apps.products.models import ProductVariant
+from apps.products.models import Inventory
 
 
 class Cart(TimeStampedModel):
@@ -46,9 +47,7 @@ class Cart(TimeStampedModel):
 
     def __str__(self) -> str:
         return (
-            f"Cart for {self.user}"
-            if self.user
-            else f"Guest cart ({self.session_key})"
+            f"Cart for {self.user}" if self.user else f"Guest cart ({self.session_key})"
         )
 
     @property
@@ -95,15 +94,10 @@ class CartItem(TimeStampedModel):
         return self.variant.price * self.quantity
 
     def clean(self) -> None:
-        """
-        Prevents adding more than what's actually in stock. Runs on
-        save so this holds regardless of entry point (API, admin,
-        script) — not just serializer-level validation.
-        """
-        available = getattr(self.variant, "inventory", None)
-        if available and self.quantity > available.quantity:
+        inventory = Inventory.objects.filter(variant=self.variant).first()
+        if inventory and self.quantity > inventory.available_quantity:
             raise ValidationError(
-                f"Only {available.quantity} units of {self.variant.sku} are available."
+                f"Only {inventory.available_quantity} units of {self.variant.sku} are available."
             )
 
     def save(self, *args, **kwargs) -> None:

@@ -15,6 +15,19 @@ def api_client():
 
 
 class TestGuestCart:
+
+    def test_repeat_add_exceeding_stock_returns_400_not_500(self, api_client):
+        variant = ProductVariantFactory(inventory=5)
+        api_client.post(
+            "/api/v1/cart/items/", {"variant_id": variant.id, "quantity": 3}
+        )
+
+        response = api_client.post(
+            "/api/v1/cart/items/", {"variant_id": variant.id, "quantity": 3}
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
     def test_guest_can_add_item_without_auth(self, api_client):
         variant = ProductVariantFactory()
         response = api_client.post(

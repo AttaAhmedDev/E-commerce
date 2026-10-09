@@ -1,4 +1,5 @@
 from decimal import Decimal
+from random import choices
 from django.db import transaction
 from rest_framework import serializers
 
@@ -6,6 +7,34 @@ from apps.accounts.models import Address
 from apps.products.models import Inventory
 from apps.cart.utils import get_or_create_cart
 from .models import Order, OrderItem, OrderStatus, PaymentMethod
+from .services import transition_order_status, InvalidTransition
+
+# info -> difference between Modelserializer and Serializer is that Modelserializer is a subclass of Serializer and has a Meta class with a model field (connected to model class) and Serializer is customized serializer for specific model or dictionary
+
+
+class OrderStatusUpdateSerializer(serializers.ModelSerializer):
+
+    status = serializers.ChoiceField(choices=OrderStatus.choices)
+
+    class Meta:
+        model = Order
+        fields = ["status"]
+
+    # hint -> context is a dictionary that contains the request and the view (send to serializer)
+    def validate_status(self, value: str) -> str:
+        order = self.context["order"]
+        if not order.can_transition_to(value):
+            raise serializers.ValidationError(
+                f"Cannot transition from '{order.status}' to '{value}'. "
+            )
+        return value
+
+    def save(self, **kwargs) -> Order:
+        order = self.context["order"]
+        try:
+            return transition_order_status(order, self.validated_data["status"])
+        except InvalidTransition as exc:
+            raise serializers.ValidationError(str(exc))
 
 
 class OrderItemSerializer(serializers.ModelSerializer):

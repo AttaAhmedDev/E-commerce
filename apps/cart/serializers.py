@@ -40,9 +40,9 @@ class CartItemSerializer(serializers.ModelSerializer):
         )
 
         inventory = getattr(variant, "inventory", None)
-        if inventory and quantity and quantity > inventory.quantity:
+        if inventory and quantity and quantity > inventory.available_quantity:
             raise serializers.ValidationError(
-                {"quantity": f"Only {inventory.quantity} units available."}
+                {"quantity": f"Only {inventory.available_quantity} units available."}
             )
         return attrs
 

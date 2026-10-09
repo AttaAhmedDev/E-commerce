@@ -64,6 +64,25 @@ class Order(TimeStampedModel):
     billing_postal_code = models.CharField(max_length=20)
     billing_country = models.CharField(max_length=100)
 
+    # This is a dictionary that maps the current status to the possible next statuses for prevent order from being in wrong steps and in wrong order.
+    VALID_TRANSITIONS = {
+        OrderStatus.PENDING_PAYMENT: {
+            OrderStatus.CONFIRMED,
+            OrderStatus.PAYMENT_FAILED,
+            OrderStatus.CANCELLED,
+        },
+        OrderStatus.CONFIRMED: {OrderStatus.PROCESSING, OrderStatus.CANCELLED},
+        OrderStatus.PROCESSING: {OrderStatus.SHIPPED, OrderStatus.CANCELLED},
+        OrderStatus.SHIPPED: {OrderStatus.DELIVERED, OrderStatus.CANCELLED},
+        OrderStatus.DELIVERED: set(),
+        OrderStatus.CANCELLED: set(),
+        OrderStatus.PAYMENT_FAILED: set(),
+    }
+
+    # This method is used to check if the order can be transitioned to the new status if not return set()
+    def can_transition_to(self, new_status: str) -> bool:
+        return new_status in self.VALID_TRANSITIONS.get(self.status, set())
+
     class Meta:
         db_table = "orders"
         ordering = ["-created_at"]
