@@ -143,28 +143,6 @@ class TestStaffStatusUpdate:
         response = client_for(customer).post(self.url(order), {"status": "processing"})
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_payment_success_converts_reservation_to_real_decrement(
-        self, customer, staff, variant
-    ):
-        order = place_order(customer, variant, "online", quantity=2)
-        assert stock(variant) == (10, 2)
-
-        response = client_for(staff).post(self.url(order), {"status": "confirmed"})
-
-        assert response.status_code == status.HTTP_200_OK
-        assert stock(variant) == (8, 0)
-
-    def test_payment_failure_releases_reservation_without_losing_stock(
-        self, customer, staff, variant
-    ):
-        order = place_order(customer, variant, "online", quantity=2)
-
-        response = client_for(staff).post(self.url(order), {"status": "payment_failed"})
-
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data["status"] == "payment_failed"
-        assert stock(variant) == (10, 0)
-
     def test_full_fulfillment_flow_does_not_touch_inventory(
         self, customer, staff, variant
     ):
@@ -205,6 +183,19 @@ class TestStaffStatusUpdate:
 
         assert response.status_code == status.HTTP_200_OK
         assert stock(variant) == (10, 0)
+
+    @pytest.mark.parametrize("payment_status", ["confirmed", "payment_failed"])
+    def test_staff_cannot_set_payment_outcomes_manually(
+        self, customer, staff, variant, payment_status
+    ):
+        order = place_order(customer, variant, "online", quantity=2)
+
+        response = client_for(staff).post(self.url(order), {"status": payment_status})
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        order.refresh_from_db()
+        assert order.status == "pending_payment"
+        assert stock(variant) == (10, 2)  # reservation untouched
 
 
 class TestCancelConcurrency:

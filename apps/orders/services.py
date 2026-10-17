@@ -3,6 +3,10 @@ from collections import defaultdict
 
 from .models import Order, OrderStatus
 
+# for updating the inventory in database directly
+from django.db.models import F
+from apps.cart.models import Cart, CartItem
+
 COMMIT = "commit"
 RELEASE = "release"
 RESTOCK = "restock"
@@ -37,6 +41,26 @@ def _inventory_effect(old: str, new: str) -> str | None:
     ):
         return RESTOCK
     return None
+
+
+# for restoring the cart from the order
+def _restore_cart_from_order(order: Order) -> None:
+    # retrieve the cart for the user and boolean to check if the cart was created (tuple)
+    cart, _ = Cart.objects.get_or_create(user=order.user)
+    existing = {item.variant_id: item for item in cart.items.all()}
+
+    new_items = []
+    for line in order.items.all():
+        if line.variant_id in existing:
+            CartItem.objects.filter(pk=existing[line.variant_id].pk).update(
+                quantity=F("quantity") + line.quantity
+            )
+        else:
+            new_items.append(
+                CartItem(cart=cart, variant_id=line.variant_id, quantity=line.quantity)
+            )
+
+    CartItem.objects.bulk_create(new_items)
 
 
 def transition_order_status(order: Order, new_status: str) -> Order:
@@ -82,5 +106,8 @@ def transition_order_status(order: Order, new_status: str) -> Order:
 
         order.status = new_status
         order.save(update_fields=["status", "updated_at"])
+
+        if new_status == OrderStatus.PAYMENT_FAILED:
+            _restore_cart_from_order(order)
 
     return order

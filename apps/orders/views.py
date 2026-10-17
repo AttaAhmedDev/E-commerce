@@ -14,6 +14,8 @@ from .serializers import (
     OrderStatusUpdateSerializer,
 )
 
+PAYMENT_ONLY_STATUSES = {OrderStatus.CONFIRMED, OrderStatus.PAYMENT_FAILED}
+
 
 class IsAdminOrStaff(IsAuthenticated):
     """
@@ -116,29 +118,26 @@ class OrderCancelView(APIView):
 
 
 class OrderFulfillmentUpdateView(APIView):
-    """
-    POST /api/v1/orders/<id>/status/
-    Admin/staff only — moves an order through fulfillment
-    (processing/shipped/delivered) or resolves payment
-    (confirmed/payment_failed from pending_payment). This is the
-    endpoint a real payment gateway webhook would eventually call
-    for the confirmed/payment_failed transitions, once Stripe/Paymob
-    is wired in — for now, triggered manually by an admin/staff user
-    to simulate that gateway callback.
-    """
-
     permission_classes = [IsAdminOrStaff]
 
     def post(self, request, pk):
         order = Order.objects.filter(pk=pk).first()
         if order is None:
             return Response(
-                {"detail": "Order not found"}, status=status.HTTP_404_NOT_FOUND
+                {"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND
             )
+
+        if request.data.get("status") in PAYMENT_ONLY_STATUSES:
+            return Response(
+                {
+                    "detail": "Payment outcomes are set by the payment gateway, not manually."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         serializer = OrderStatusUpdateSerializer(
-            data={"status": request.data.get("status")}, context={"order": order}
+            data=request.data, context={"order": order}
         )
         serializer.is_valid(raise_exception=True)
-        update_order = serializer.save()
-        # hint -> add .data for convert order object to json to send to client (Response)
-        return Response(OrderSerializer(update_order).data)
+        updated_order = serializer.save()
+        return Response(OrderSerializer(updated_order).data)

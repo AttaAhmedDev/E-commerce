@@ -11,6 +11,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = config("SECRET_KEY")
 
+PAYMENT_GATEWAY = config("PAYMENT_GATEWAY", default="fake")
+FAKE_GATEWAY_SECRET = config("FAKE_GATEWAY_SECRET", default="dev-only-secret")
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -31,6 +34,7 @@ INSTALLED_APPS = [
     "apps.cart",
     "apps.wishlist",
     "apps.orders",
+    "apps.payments",
 ]
 
 MIDDLEWARE = [
